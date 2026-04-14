@@ -140,7 +140,6 @@ img{
 
 let checklistData = { title:"", steps:[] };
 
-// 🔥 FIX: samma struktur som gamla buildern
 let stream = null;
 let recorder = null;
 let chunks = [];
@@ -248,7 +247,7 @@ function loadAudio(e,i){
   checklistData.steps[i].audio=url;
 }
 
-/* ===== LJUD INSPELNING (FIXAD) ===== */
+/* ===== LJUD INSPELNING ===== */
 
 async function startRec(i){
 
@@ -285,8 +284,6 @@ function stopRec(){
 function playRec(i){
   if(checklistData.steps[i].audio){
     new Audio(checklistData.steps[i].audio).play();
-  } else {
-    alert("Ingen inspelning finns");
   }
 }
 
@@ -294,6 +291,45 @@ function playRec(i){
 
 function updateData(){
   checklistData.title=document.getElementById("title").value;
+}
+
+/* ===== 🔥 FIXAD IMPORT ===== */
+
+function importJSON(){
+
+  let input=document.createElement("input");
+  input.type="file";
+  input.accept="application/json";
+
+  input.onchange=e=>{
+    let r=new FileReader();
+
+    r.onload=()=>{
+      try{
+        checklistData=JSON.parse(r.result);
+
+        // 🔥 FIX (detta var det som saknades)
+        checklistData.steps = checklistData.steps || [];
+
+        checklistData.steps = checklistData.steps.map(step => ({
+          text: step.text || "",
+          img: step.img || "",
+          audio: step.audio || ""
+        }));
+
+        document.getElementById("title").value=checklistData.title || "";
+        render();
+
+        alert("Checklista laddad!");
+      }catch{
+        alert("Fel fil");
+      }
+    };
+
+    r.readAsText(e.target.files[0]);
+  };
+
+  input.click();
 }
 
 /* ===== PREVIEW ===== */
