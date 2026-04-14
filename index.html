@@ -109,7 +109,6 @@ img{
   <div class="tool-btn" onclick="saveChecklist()">
     <div class="icon">💾</div>
     <div class="label">Spara</div>
-
   </div>
 
   <div class="tool-btn" onclick="loadChecklist()">
@@ -141,8 +140,19 @@ img{
 
 let checklistData = { title:"", steps:[] };
 
-let recorder, chunks=[];
-let currentStepIndex=null;
+// 🔥 FIX: samma struktur som gamla buildern
+let stream = null;
+let recorder = null;
+let chunks = [];
+let currentStepIndex = null;
+
+/* ===== MIC ===== */
+
+async function initMic(){
+  if(!stream){
+    stream = await navigator.mediaDevices.getUserMedia({audio:true});
+  }
+}
 
 /* ===== RENDER ===== */
 
@@ -163,18 +173,18 @@ function render(){
 
       <br>
 
-<div style="display:flex; align-items:center; gap:8px;">
-  <span>📷</span>
-  <input type="file" onchange="loadImage(event,${i})">
-</div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span>📷</span>
+        <input type="file" onchange="loadImage(event,${i})">
+      </div>
 
-${step.img ? `<img src="${step.img}">` : ''}
+      ${step.img ? `<img src="${step.img}">` : ''}
 
-<div style="display:flex; align-items:center; gap:8px;">
-  <span>🔊</span>
-  <input type="file" accept="audio/*" onchange="loadAudio(event,${i})">
-  ${step.audio ? `<span style="margin-left:6px;">🔊 ljud tillagt</span>` : ''}
-</div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span>🔊</span>
+        <input type="file" accept="audio/*" onchange="loadAudio(event,${i})">
+        ${step.audio ? `<span>✔</span>` : ''}
+      </div>
 
       <button class="smallBtn" onclick="startRec(${i})">🎤 Spela in</button>
       <button class="smallBtn" onclick="stopRec()">⏹ Stoppa</button>
@@ -220,22 +230,12 @@ function moveDown(i){
 /* ===== BILD ===== */
 
 function loadImage(e,i){
-  const file = e.target.files[0];
-  if(!file) return;
-
-  const r = new FileReader();
-
-  r.onload = ()=>{
-    checklistData.steps[i].img = r.result;
-
-    // 🔥 uppdatera bara bilden, inte hela render()
-    const imgs = document.querySelectorAll("#steps img");
-    if(imgs[i]){
-      imgs[i].src = r.result;
-    }
+  const r=new FileReader();
+  r.onload=()=>{
+    checklistData.steps[i].img=r.result;
+    render();
   };
-
-  r.readAsDataURL(file);
+  r.readAsDataURL(e.target.files[0]);
 }
 
 /* ===== LJUD UPLOAD ===== */
@@ -248,21 +248,28 @@ function loadAudio(e,i){
   checklistData.steps[i].audio=url;
 }
 
-/* ===== LJUD ===== */
+/* ===== LJUD INSPELNING (FIXAD) ===== */
 
 async function startRec(i){
-  const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-  recorder=new MediaRecorder(stream);
-  chunks=[];
-  currentStepIndex=i;
 
-  recorder.ondataavailable=e=>chunks.push(e.data);
-  recorder.onstop=()=>{
-    const blob=new Blob(chunks);
-    const r=new FileReader();
-    r.onload=()=>{
-      checklistData.steps[currentStepIndex].audio=r.result;
+  await initMic();
+
+  currentStepIndex = i;
+  chunks = [];
+
+  recorder = new MediaRecorder(stream);
+
+  recorder.ondataavailable = e => chunks.push(e.data);
+
+  recorder.onstop = () => {
+    const blob = new Blob(chunks,{type:'audio/webm'});
+
+    const r = new FileReader();
+    r.onload = () => {
+      checklistData.steps[currentStepIndex].audio = r.result;
+      render();
     };
+
     r.readAsDataURL(blob);
   };
 
@@ -270,12 +277,16 @@ async function startRec(i){
 }
 
 function stopRec(){
-  if(recorder) recorder.stop();
+  if(recorder && recorder.state === "recording"){
+    recorder.stop();
+  }
 }
 
 function playRec(i){
   if(checklistData.steps[i].audio){
     new Audio(checklistData.steps[i].audio).play();
+  } else {
+    alert("Ingen inspelning finns");
   }
 }
 
@@ -283,124 +294,6 @@ function playRec(i){
 
 function updateData(){
   checklistData.title=document.getElementById("title").value;
-}
-
-/* ===== SAVE ===== */
-
-function saveChecklist(){
-  let name = prompt("Namn på checklistan:");
-  if(!name) return;
-
-  updateData();
-
-  // 🔥 skapa kopia utan media
-  const cleanData = JSON.parse(JSON.stringify(checklistData));
-
-  cleanData.steps.forEach(step=>{
-    delete step.img;
-    delete step.audio;
-  });
-
-  localStorage.setItem("checklist_" + name, JSON.stringify(cleanData));
-
-  alert("Sparad (utan bild/ljud)");
-}
-
-/* ===== LOAD ===== */
-
-function loadChecklist(){
-
-  let keys = Object.keys(localStorage).filter(k => 
-    k.startsWith("checklist_")
-  );
-
-  if(keys.length === 0){
-    alert("Inga sparade checklistor hittades");
-    return;
-  }
-
-  let list = document.getElementById("templateList");
-  list.style.display = "block";
-
-  list.innerHTML = `
-    <h3>Sparade checklistor</h3>
-    <div id="savedList"></div>
-    <h3>Autosparat</h3>
-    <div id="autoList"></div>
-  `;
-
-  const savedList = document.getElementById("savedList");
-  const autoList = document.getElementById("autoList");
-
-  keys.forEach(key => {
-
-    let btn = document.createElement("button");
-    btn.className = "smallBtn";
-
-    if(key === "checklist_autosave"){
-      btn.innerText = "🔄 Senaste autosparade";
-
-      btn.onclick = ()=>{
-        checklistData = JSON.parse(localStorage.getItem(key));
-        document.getElementById("title").value = checklistData.title;
-        render();
-        list.style.display = "none";
-      };
-
-      autoList.appendChild(btn);
-
-    } else {
-
-      btn.innerText = key.replace("checklist_","");
-
-      btn.onclick = ()=>{
-        checklistData = JSON.parse(localStorage.getItem(key));
-        document.getElementById("title").value = checklistData.title;
-        render();
-        list.style.display = "none";
-      };
-
-      savedList.appendChild(btn);
-    }
-
-  });
-}
-
-/* ===== JSON ===== */
-
-function exportJSON(){
-  updateData();
-
-  let blob=new Blob([JSON.stringify(checklistData,null,2)],{type:"application/json"});
-  let a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download="checklista.json";
-  a.click();
-}
-
-function importJSON(){
-  let input=document.createElement("input");
-  input.type="file";
-  input.accept="application/json";
-
-  input.onchange=e=>{
-    let r=new FileReader();
-
-    r.onload=()=>{
-      try{
-        checklistData=JSON.parse(r.result);
-        document.getElementById("title").value=checklistData.title;
-        render();
-        alert("Checklista laddad!");
-      }catch{
-        alert("Fel fil");
-      }
-    };
-
-    r.readAsText(e.target.files[0]);
-  };
-
-  input.click();
 }
 
 /* ===== PREVIEW ===== */
@@ -412,11 +305,10 @@ function generatePreview(){
   let html=`<h3>${checklistData.title}</h3>`;
 
   checklistData.steps.forEach((s,i)=>{
-    if(!s.text)return;
-
     html+=`
       <div>
-      <b>${i+1}. ${s.text}</b><br>
+      <b>Steg ${i+1}</b><br>
+      ${s.text||""}<br>
       ${s.img ? `<img src="${s.img}">` : ''}
       ${s.audio ? `<button onclick="new Audio('${s.audio}').play()">▶️</button>` : ''}
       <br><input type="checkbox"> Klart
@@ -427,22 +319,6 @@ function generatePreview(){
   const preview=document.getElementById("preview");
   preview.innerHTML=html;
   preview.style.display="block";
-}
-
-/* ===== HTML ===== */
-
-function downloadHTML(){
-  generatePreview();
-
-  let html=`<!DOCTYPE html><html><body style="font-family:sans-serif;padding:20px;">
-  ${document.getElementById("preview").innerHTML}
-  </body></html>`;
-
-  let blob=new Blob([html],{type:"text/html"});
-  let a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download="checklista.html";
-  a.click();
 }
 
 /* INIT */
