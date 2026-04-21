@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="sv">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Digital Aktivitets-checklista</title>
+<title>Digital Checklist Template</title>
 
 <style>
 body{
@@ -94,46 +94,44 @@ img{
 
 <body>
 
-<h2>Digital Aktivitets-checklista</h2>
+<h2>Digital Checklist Template</h2>
 
 <div class="section">
-  <input id="title" placeholder="Titel på checklistan" oninput="updateData()">
+  <input id="title" placeholder="Checklist title" oninput="updateData()">
 </div>
 
 <div id="steps"></div>
 
-<button onclick="addStep()">➕ Lägg till steg</button>
+<button onclick="addStep()">➕ Add step</button>
 
 <div class="tool-row">
 
-  <div class="tool-btn" onclick="saveChecklist()">
-    <div class="icon">💾</div>
-    <div class="label">Spara</div>
+  <div class="tool-btn" onclick="exportFiles()">
+    <div class="icon">📁</div>
+    <div class="label">Export (GitHub)</div>
   </div>
 
-  <div class="tool-btn" onclick="loadChecklist()">
-    <div class="icon">📂</div>
-    <div class="label">Öppna</div>
+  <div class="tool-btn" onclick="downloadHTML()">
+    <div class="icon">📄</div>
+    <div class="label">Download HTML</div>
   </div>
 
   <div class="tool-btn" onclick="exportJSON()">
     <div class="icon">⬇️</div>
-    <div class="label">Ladda ner</div>
+    <div class="label">Download JSON</div>
   </div>
 
   <div class="tool-btn" onclick="importJSON()">
     <div class="icon">⬆️</div>
-    <div class="label">Ladda upp</div>
+    <div class="label">Upload JSON</div>
   </div>
 
 </div>
 
 <br>
 
-<button onclick="generatePreview()">▶️ Generera preview</button>
-<button onclick="downloadHTML()">⬇️ Ladda ner HTML</button>
+<button onclick="generatePreview()">▶️ Generate preview</button>
 
-<div id="templateList" class="section" style="display:none;"></div>
 <div id="preview" class="section"></div>
 
 <script>
@@ -165,9 +163,9 @@ function render(){
     div.className="section step";
 
     div.innerHTML=`
-      <b>Steg ${i+1}</b><br>
+      <b>Step ${i+1}</b><br>
 
-      <input value="${step.text||''}" placeholder="Beskrivning"
+      <input value="${step.text||''}" placeholder="Description"
       oninput="checklistData.steps[${i}].text=this.value">
 
       <br>
@@ -185,9 +183,9 @@ function render(){
         ${step.audio ? `<span>✔</span>` : ''}
       </div>
 
-      <button class="smallBtn" onclick="startRec(${i})">🎤 Spela in</button>
-      <button class="smallBtn" onclick="stopRec()">⏹ Stoppa</button>
-      <button class="smallBtn" onclick="playRec(${i})">▶️ Lyssna</button>
+      <button class="smallBtn" onclick="startRec(${i})">🎤 Record</button>
+      <button class="smallBtn" onclick="stopRec()">⏹ Stop</button>
+      <button class="smallBtn" onclick="playRec(${i})">▶️ Play</button>
 
       <br>
 
@@ -200,10 +198,10 @@ function render(){
   });
 }
 
-/* ===== STEG ===== */
+/* ===== STEPS ===== */
 
 function addStep(){
-  checklistData.steps.push({});
+  checklistData.steps.push({text:"",img:"",audio:""});
   render();
 }
 
@@ -226,28 +224,70 @@ function moveDown(i){
   render();
 }
 
-/* ===== BILD ===== */
+/* ===== IMAGE ===== */
 
 function loadImage(e,i){
-  const r=new FileReader();
-  r.onload=()=>{
-    checklistData.steps[i].img=r.result;
-    render();
+  const file = e.target.files[0];
+  if(!file) return;
+
+  const img = new Image();
+  const reader = new FileReader();
+
+  reader.onload = function(evt){
+    img.onload = function(){
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      const maxWidth = 600;
+
+      let width = img.width;
+      let height = img.height;
+
+      if(width > maxWidth){
+        const scale = maxWidth / width;
+        width = maxWidth;
+        height = height * scale;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.drawImage(img,0,0,width,height);
+
+      canvas.toBlob(function(blob){
+
+        const url = URL.createObjectURL(blob);
+
+        checklistData.steps[i].img = url;
+        checklistData.steps[i].imgBlob = blob;
+
+        render();
+
+      }, "image/jpeg", 0.6);
+    };
+
+    img.src = evt.target.result;
   };
-  r.readAsDataURL(e.target.files[0]);
+
+  reader.readAsDataURL(file);
 }
 
-/* ===== LJUD UPLOAD ===== */
+/* ===== AUDIO ===== */
 
 function loadAudio(e,i){
   const file=e.target.files[0];
   if(!file) return;
 
-  const url=URL.createObjectURL(file);
-  checklistData.steps[i].audio=url;
+  const r = new FileReader();
+  r.onload = ()=>{
+    checklistData.steps[i].audio = r.result;
+    render();
+  };
+  r.readAsDataURL(file);
 }
 
-/* ===== LJUD INSPELNING ===== */
+/* ===== RECORDING ===== */
 
 async function startRec(i){
 
@@ -293,7 +333,54 @@ function updateData(){
   checklistData.title=document.getElementById("title").value;
 }
 
-/* ===== 🔥 FIXAD IMPORT ===== */
+/* ===== HTML EXPORT ===== */
+
+function downloadHTML(){
+
+  updateData();
+
+  let html = `
+  <!DOCTYPE html>
+  <html>
+  <body>
+  <h2>${checklistData.title}</h2>
+  `;
+
+  checklistData.steps.forEach((step,i)=>{
+
+    html += `
+    <div>
+      <b>Step ${i+1}</b><br>
+      ${step.text || ""}<br>
+      ${step.img ? `<img src="${step.img}">` : ''}
+      ${step.audio ? `<button onclick="new Audio('${step.audio}').play()">▶️</button>` : ''}
+      <br><input type="checkbox"> Done
+    </div><br>
+    `;
+  });
+
+  html += `</body></html>`;
+
+  const blob = new Blob([html], {type:"text/html"});
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "checklist.html";
+  a.click();
+}
+
+/* ===== JSON ===== */
+
+function exportJSON(){
+  updateData();
+
+  let blob=new Blob([JSON.stringify(checklistData,null,2)],{type:"application/json"});
+  let a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="checklist.json";
+  a.click();
+}
 
 function importJSON(){
 
@@ -305,56 +392,15 @@ function importJSON(){
     let r=new FileReader();
 
     r.onload=()=>{
-      try{
-        checklistData=JSON.parse(r.result);
-
-        // 🔥 FIX (detta var det som saknades)
-        checklistData.steps = checklistData.steps || [];
-
-        checklistData.steps = checklistData.steps.map(step => ({
-          text: step.text || "",
-          img: step.img || "",
-          audio: step.audio || ""
-        }));
-
-        document.getElementById("title").value=checklistData.title || "";
-        render();
-
-        alert("Checklista laddad!");
-      }catch{
-        alert("Fel fil");
-      }
+      checklistData=JSON.parse(r.result);
+      document.getElementById("title").value=checklistData.title;
+      render();
     };
 
     r.readAsText(e.target.files[0]);
   };
 
   input.click();
-}
-
-/* ===== PREVIEW ===== */
-
-function generatePreview(){
-
-  updateData();
-
-  let html=`<h3>${checklistData.title}</h3>`;
-
-  checklistData.steps.forEach((s,i)=>{
-    html+=`
-      <div>
-      <b>Steg ${i+1}</b><br>
-      ${s.text||""}<br>
-      ${s.img ? `<img src="${s.img}">` : ''}
-      ${s.audio ? `<button onclick="new Audio('${s.audio}').play()">▶️</button>` : ''}
-      <br><input type="checkbox"> Klart
-      </div><br>
-    `;
-  });
-
-  const preview=document.getElementById("preview");
-  preview.innerHTML=html;
-  preview.style.display="block";
 }
 
 /* INIT */
