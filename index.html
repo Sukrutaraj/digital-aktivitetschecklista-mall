@@ -212,21 +212,57 @@ function removeStep(i){
   render();
 }
 
-/* ===== IMAGE ===== */
+/* ===== BILD ===== */
 
 function loadImage(e,i){
   const file = e.target.files[0];
   if(!file) return;
 
+  const img = new Image();
   const reader = new FileReader();
-  reader.onload = ()=>{ 
-    checklistData.steps[i].img = reader.result;
-    render();
+
+  reader.onload = function(event){
+    img.onload = function(){
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      const maxWidth = 600; // 🔥 ändra här om du vill
+      let width = img.width;
+      let height = img.height;
+
+      if(width > maxWidth){
+        const scale = maxWidth / width;
+        width = maxWidth;
+        height = height * scale;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(function(blob){
+
+        const reader2 = new FileReader();
+        reader2.onload = function(){
+          checklistData.steps[i].img = reader2.result;
+          render();
+        };
+
+        reader2.readAsDataURL(blob);
+
+      }, "image/jpeg", 0.6); // 🔥 kvalitet (0.6 = bra balans)
+
+    };
+
+    img.src = event.target.result;
   };
+
   reader.readAsDataURL(file);
 }
 
-/* ===== AUDIO ===== */
+/* ===== LJUD ===== */
 
 function loadAudio(e,i){
   const file=e.target.files[0];
@@ -240,7 +276,7 @@ function loadAudio(e,i){
   reader.readAsDataURL(file);
 }
 
-/* ===== RECORDING ===== */
+/* ===== INSPELNING ===== */
 
 async function startRec(i){
   await initMic();
@@ -275,11 +311,11 @@ function playRec(i){
   }
 }
 
-/* ===== EXPORT FILES ===== */
+/* ===== EXPORT ===== */
 
 async function exportFiles(){
 
-  alert("Filer laddas ner stegvis...");
+  alert("Laddar ner filer steg för steg...");
 
   let delay = 0;
 
@@ -306,7 +342,7 @@ async function exportFiles(){
   }, delay + 500);
 }
 
-/* ===== HTML ===== */
+/* ===== HTML EXPORT ===== */
 
 function downloadHTML(){
 
@@ -354,7 +390,6 @@ function downloadHTML(){
       background:#eee;
       cursor:pointer;
     }
-
   </style>
   </head>
 
@@ -364,7 +399,6 @@ function downloadHTML(){
   `;
 
   checklistData.steps.forEach((s,i)=>{
-
     html += `
       <div class="step">
         <b>Steg ${i+1}</b><br>
@@ -377,10 +411,7 @@ function downloadHTML(){
     `;
   });
 
-  html += `
-  </body>
-  </html>
-  `;
+  html += `</body></html>`;
 
   download(html, "checklista.html", "text/html");
 }
@@ -414,7 +445,7 @@ function importJSON(){
         render();
         alert("Checklista laddad!");
       }catch{
-        alert("Fel fil");
+        alert("Ogiltig fil");
       }
     };
 
@@ -447,7 +478,7 @@ function generatePreview(){
   preview.style.display="block";
 }
 
-/* ===== DOWNLOAD (FIXAD) ===== */
+/* ===== DOWNLOAD ===== */
 
 function download(data,name,type="text/plain"){
   const blob = new Blob([data],{type});
